@@ -57,19 +57,19 @@ class Video {
         int video_stream_index_ = -1;
 
         // The component that knows how to encode/decode our stream
-        AVCodec* pCodec = nullptr;
+        AVCodec* codec_ = nullptr;
 
         // A frame from our stream (use out_mutex_ on access)
         AVFrame* out_frame_ = nullptr;
 
         // the video container (also known as a "format")
-        AVFormatContext* pFormatContext = nullptr;
+        AVFormatContext* format_ctx_ = nullptr;
 
         // This structure stores compressed data
-        AVPacket* pPacket = nullptr;
+        AVPacket* packet_ = nullptr;
 
         // hold the context for our decode/encode process
-        AVCodecContext* pCodecContext = nullptr;
+        AVCodecContext* codec_ctx_ = nullptr;
 
         // Whether or not we're running
         std::atomic<bool> running_;
@@ -78,7 +78,7 @@ class Video {
         VideoError out_err_ = "";
 
         // The frame we are outputting
-        AVFrame* pFrame = nullptr;
+        AVFrame* frame_ = nullptr;
 
         // Dimensions
         int width_;
