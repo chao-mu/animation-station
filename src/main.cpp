@@ -14,27 +14,15 @@ extern "C" {
 #include <libavutil/error.h>
 }
 
+// SDL
+extern "C" {
+#include <SDL2/SDL.h>
+}
+
 // Ours
 #include "Video.h"
 
-void save_gray_frame(unsigned char *buf, int wrap, int xsize, int ysize, const char *filename);
-
-/*
-static void logging(const char *fmt, ...)
-{
-    va_list args;
-    fprintf( stderr, "LOG: " );
-    va_start( args, fmt );
-    vfprintf( stderr, fmt, args );
-    va_end( args );
-    fprintf( stderr, "\n" );
-}
-*/
-
-int main(int argc, char **argv)
-{
-    //av_register_all();
-
+int main(int argc, char** argv) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <input file>\n", argv[0]);
         exit(0);
@@ -42,50 +30,76 @@ int main(int argc, char **argv)
 
     const std::string path = argv[1];
 
-    auto onFrame = [](AVFrame* /*pFrame*/) {
-    };
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER)) {
+        std::cerr << "Could not initialize SDL - " <<  SDL_GetError() << std::endl;
+        return 1;
+    }
 
-    auto onErr = [](VideoError err) {
-        std::cerr << "Error! " << err << std::endl;
-    };
+    auto video = std::make_shared<Video>(path);
+    VideoError err = video->load();
+    if (!err.empty()) {
+        std::cerr << "Error loading video " << err << std::endl;
+    }
 
-    std::vector<std::shared_ptr<Video>> videos;
-    for (int i = 0; i < 100; i++) {
-        auto video = std::make_shared<Video>(path, onFrame, onErr);
-        videos.push_back(video);
+    int screen_w = video->getWidth();
+    int screen_h = video->getHeight();
+    printf("%d %d\n", screen_w, screen_h);
 
-        VideoError err = video->load();
+    SDL_Window* screen = SDL_CreateWindow(
+        "Animation Station",
+        SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+        screen_w, screen_h,
+        SDL_WINDOW_OPENGL
+    );
+    if (!screen) {
+		printf("SDL: could not create window - exiting:%s\n",SDL_GetError());
+        return 1;
+    }
+
+	SDL_Renderer* renderer = SDL_CreateRenderer(screen, -1, 0);
+    SDL_Texture* texture = SDL_CreateTexture(
+            renderer, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING,screen_w,screen_h);
+
+    SDL_Rect rect;
+	rect.x = 0;
+	rect.y = 0;
+	rect.w = screen_w;
+	rect.h = screen_h;
+
+    video->start();
+
+    bool quit = false;
+    while (!quit) {
+            VideoError err = video->loanFrame([texture, renderer, rect](AVFrame* pFrame) {
+            SDL_UpdateYUVTexture(texture, &rect,
+                    pFrame->data[0], pFrame->linesize[0],
+                    pFrame->data[1], pFrame->linesize[1],
+                    pFrame->data[2], pFrame->linesize[2]);
+            SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, texture,  NULL, &rect);
+            SDL_RenderPresent(renderer);
+
+            return "";
+        });
         if (!err.empty()) {
-            std::cerr << "Womp womp: " << err << std::endl;
+            std::cerr << "Video error: " << err << std::endl;
             return 1;
         }
+
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            //If user closes the window
+            if (e.type == SDL_QUIT){
+                quit = true;
+            }
+        }
+
+        SDL_Delay(30);
     }
 
-    for (int i = 0; i < 4; i++) {
-        videos[i]->start();
-    }
+    video->stop();
 
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-
-    for (int i = 0; i < 4; i++) {
-        videos[i]->stop();
-    }
+    SDL_Quit();
 
     return 0;
-}
-
-// save_gray_frame(pFrame->data[0], pFrame->linesize[0], pFrame->width, pFrame->height, frame_filename);
-void save_gray_frame(unsigned char *buf, int wrap, int xsize, int ysize, const char *filename)
-{
-    FILE *f;
-    int i;
-    f = fopen(filename,"w");
-    // writing the minimal required header for a pgm file format
-    // portable graymap format -> https://en.wikipedia.org/wiki/Netpbm_format#PGM_example
-    fprintf(f, "P5\n%d %d\n%d\n", xsize, ysize, 255);
-
-    // writing line by line
-    for (i = 0; i < ysize; i++)
-        fwrite(buf + i * wrap, 1, xsize, f);
-    fclose(f);
 }

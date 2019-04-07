@@ -6,6 +6,7 @@
 #include <functional>
 #include <thread>
 #include <chrono>
+#include <mutex>
 
 // LibAV
 extern "C" {
@@ -15,18 +16,31 @@ extern "C" {
 }
 
 using VideoError = std::string;
-using FrameCallback = std::function<void(AVFrame*)>;
+using FrameCallback = std::function<VideoError(AVFrame*)>;
 
 class Video {
     public:
-        Video(const std::string& path, FrameCallback onFrame, std::function<void(VideoError)> onErr);
+        Video(const std::string& path);
         ~Video();
+
+        // start playback
         VideoError start();
+
+        // pause playback
         void stop();
+
         // Load resources
         VideoError load();
 
+        VideoError loanFrame(FrameCallback cb);
+
+        int getWidth();
+        int getHeight();
+
     private:
+        // Report error
+        void setError(VideoError err);
+
         // Free allocated resources
         void freeAll();
 
@@ -35,10 +49,6 @@ class Video {
 
         // Path to video
         const std::string path_;
-
-        // Callbacks
-        FrameCallback on_frame_;
-        std::function<void(VideoError)> on_err_;
 
         // Prepare our frame
         VideoError decodePacket();
@@ -49,8 +59,8 @@ class Video {
         // The component that knows how to encode/decode our stream
         AVCodec* pCodec = nullptr;
 
-        // A frame from our stream
-        AVFrame* pFrame = nullptr;
+        // A frame from our stream (use out_mutex_ on access)
+        AVFrame* out_frame_ = nullptr;
 
         // the video container (also known as a "format")
         AVFormatContext* pFormatContext = nullptr;
@@ -64,12 +74,25 @@ class Video {
         // Whether or not we're running
         std::atomic<bool> running_;
 
+        // Last encountered error
+        VideoError out_err_ = "";
+
+        // The frame we are outputting
+        AVFrame* pFrame = nullptr;
+
+        // Dimensions
+        int width_;
+        int height_;
+
         bool loaded_ = false;
 
         std::thread our_thread_;
 
         int64_t last_pos_ = 0;
         std::chrono::time_point<std::chrono::high_resolution_clock> last_processed_at_;
+
+        // Locking out_* variables (shared varaibles)
+        std::mutex out_mutex_;
 };
 
 #endif

@@ -13,11 +13,7 @@ Video::~Video() {
     freeAll();
 }
 
-Video::Video(
-    const std::string& path,
-    FrameCallback onFrame,
-    std::function<void(VideoError)> onErr
-) : path_(path), on_frame_(onFrame), on_err_(onErr), running_(false) {}
+Video::Video(const std::string& path) : path_(path), running_(false) {}
 
 VideoError Video::start() {
     if (running_) {
@@ -83,9 +79,8 @@ VideoError Video::load() {
 
     pCodecContext = avcodec_alloc_context3(pCodec);
     if (!pCodecContext) {
-        return "failed to allocated memory for AVCodecContext";
+        return "failed to allocate memory for AVCodecContext";
     }
-
     // Fill the codec context based on the values from the supplied codec parameters
     resp = avcodec_parameters_to_context(pCodecContext, pCodecParameters);
     if (resp < 0) {
@@ -98,9 +93,17 @@ VideoError Video::load() {
         return "failed to open codec through avcodec_open2: " + av_err2str(resp);
     }
 
+	width_ = pCodecContext->width;
+	height_ = pCodecContext->height;
+
+    out_frame_ = av_frame_alloc();
+    if (!out_frame_) {
+        return "failed to allocate memory for output AVFrame";
+    }
+
     pFrame = av_frame_alloc();
     if (!pFrame) {
-        return "failed to allocated memory for AVFrame";
+        return "failed to allocate memory for AVFrame";
     }
 
     pPacket = av_packet_alloc();
@@ -132,6 +135,11 @@ void Video::freeAll() {
         pPacket = nullptr;
     }
 
+    if (out_frame_ != nullptr) {
+        av_frame_free(&out_frame_);
+        pFrame = nullptr;
+    }
+
     if (pFrame != nullptr) {
         av_frame_free(&pFrame);
         pFrame = nullptr;
@@ -159,12 +167,12 @@ void Video::loop() {
         }
 
         if (resp == AVERROR_EOF) {
-            on_err_("end of file hit twice in a row, suggesting no data?");
+            setError("end of file hit twice in a row, suggesting no data?");
             return;
         }
 
         if (resp < 0) {
-            on_err_("failure to read frame: " + av_err2str(resp));
+            setError("failure to read frame: " + av_err2str(resp));
             return;
         }
 
@@ -173,7 +181,7 @@ void Video::loop() {
             VideoError err = decodePacket();
             if (!err.empty()) {
                 av_packet_unref(pPacket);
-                on_err_(err);
+                setError(err);
                 return;
             }
         }
@@ -196,6 +204,7 @@ VideoError Video::decodePacket() {
     while (resp >= 0 && running_) {
         // Return decoded output data (into a frame) from a decoder
         // https://ffmpeg.org/doxygen/trunk/group__lavc__decoding.html#ga11e6542c4e66d3028668788a1a74217c
+
         resp = avcodec_receive_frame(pCodecContext, pFrame);
         if (resp == AVERROR(EAGAIN) || resp == AVERROR_EOF) {
             break;
@@ -217,11 +226,38 @@ VideoError Video::decodePacket() {
             last_processed_at_ = std::chrono::high_resolution_clock::now();
             last_pos_ = pos;
 
-            on_frame_(pFrame);
+            {
+                std::lock_guard<std::mutex> guard(out_mutex_);
+                std::swap(pFrame, out_frame_);
+            }
 
             av_frame_unref(pFrame);
         }
     }
 
     return {};
+}
+
+VideoError Video::loanFrame(FrameCallback cb) {
+    std::lock_guard<std::mutex> guard(out_mutex_);
+    if (!out_err_.empty()) {
+        VideoError err = out_err_;
+        out_err_ = "";
+        return err;
+    }
+
+    return cb(out_frame_);
+}
+
+void Video::setError(VideoError err) {
+    std::lock_guard<std::mutex> guard(out_mutex_);
+    out_err_ = err;
+}
+
+int Video::getWidth() {
+    return width_;
+}
+
+int Video::getHeight() {
+    return height_;
 }
