@@ -17,7 +17,7 @@ Video::Video(
     const std::string& path,
     FrameCallback onFrame,
     std::function<void(VideoError)> onErr
-) : path_(path), on_frame_(onFrame), on_err_(onErr) {}
+) : path_(path), on_frame_(onFrame), on_err_(onErr), running_(false) {}
 
 VideoError Video::start() {
     if (running_) {
@@ -26,7 +26,7 @@ VideoError Video::start() {
 
     if (!loaded_) {
         VideoError err = load();
-        if (err.has_value()) {
+        if (err != "") {
             return err;
         }
     }
@@ -108,12 +108,16 @@ VideoError Video::load() {
         return "failed to allocated memory for AVPacket";
     }
 
+    loaded_ = true;
+
     return {};
 }
 
 void Video::stop() {
-    running_ = false;
-    our_thread_.join();
+    if (running_) {
+        running_ = false;
+        our_thread_.join();
+    }
 }
 
 void Video::freeAll() {
@@ -167,7 +171,7 @@ void Video::loop() {
         // if it's the video stream
         if (pPacket->stream_index == video_stream_index_) {
             VideoError err = decodePacket();
-            if (err.has_value()) {
+            if (!err.empty()) {
                 av_packet_unref(pPacket);
                 on_err_(err);
                 return;

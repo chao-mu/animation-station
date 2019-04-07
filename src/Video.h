@@ -4,7 +4,6 @@
 // STL
 #include <atomic>
 #include <functional>
-#include <optional>
 #include <thread>
 #include <chrono>
 
@@ -15,7 +14,7 @@ extern "C" {
 #include <libavutil/frame.h>
 }
 
-using VideoError = std::optional<std::string>;
+using VideoError = std::string;
 using FrameCallback = std::function<void(AVFrame*)>;
 
 class Video {
@@ -24,6 +23,8 @@ class Video {
         ~Video();
         VideoError start();
         void stop();
+        // Load resources
+        VideoError load();
 
     private:
         // Free allocated resources
@@ -31,9 +32,6 @@ class Video {
 
         // The main processing loop to be launched in a thread
         void loop();
-
-        // Load resources
-        VideoError load();
 
         // Path to video
         const std::string path_;
@@ -64,7 +62,7 @@ class Video {
         AVCodecContext* pCodecContext = nullptr;
 
         // Whether or not we're running
-        std::atomic<bool> running_ = false;
+        std::atomic<bool> running_;
 
         bool loaded_ = false;
 

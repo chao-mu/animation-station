@@ -4,11 +4,6 @@
 #include <thread>
 #include <chrono>
 
-
-// OpenGL
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-
 // TCLAP
 #include <tclap/CmdLine.h>
 
@@ -38,6 +33,8 @@ static void logging(const char *fmt, ...)
 
 int main(int argc, char **argv)
 {
+    //av_register_all();
+
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <input file>\n", argv[0]);
         exit(0);
@@ -49,21 +46,30 @@ int main(int argc, char **argv)
     };
 
     auto onErr = [](VideoError err) {
-        std::cerr << "Error! " << err.value() << std::endl;
+        std::cerr << "Error! " << err << std::endl;
     };
 
-    auto video = std::make_unique<Video>(path, onFrame, onErr);
+    std::vector<std::shared_ptr<Video>> videos;
+    for (int i = 0; i < 100; i++) {
+        auto video = std::make_shared<Video>(path, onFrame, onErr);
+        videos.push_back(video);
 
-    VideoError err = video->start();
-    if (err.has_value()) {
-        std::cerr << "Womp womp: " << err.value() << std::endl;
-        return 1;
+        VideoError err = video->load();
+        if (!err.empty()) {
+            std::cerr << "Womp womp: " << err << std::endl;
+            return 1;
+        }
     }
 
+    for (int i = 0; i < 4; i++) {
+        videos[i]->start();
+    }
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    video->stop();
+    for (int i = 0; i < 4; i++) {
+        videos[i]->stop();
+    }
 
     return 0;
 }
