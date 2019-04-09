@@ -35,8 +35,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    auto video = std::make_shared<Video>(path);
-    VideoError err = video->load();
+    auto video = std::make_shared<astation::Video>(path);
+    astation::Error err = video->load();
     if (!err.empty()) {
         std::cerr << "Error loading video " << err << std::endl;
     }
@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
 
     bool quit = false;
     while (!quit) {
-            VideoError err = video->loanFrame([texture, renderer, rect](AVFrame* pFrame) {
+        astation::Error err = video->loanFrame([texture, renderer, rect](AVFrame* pFrame) {
             SDL_UpdateYUVTexture(texture, &rect,
                     pFrame->data[0], pFrame->linesize[0],
                     pFrame->data[1], pFrame->linesize[1],
