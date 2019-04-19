@@ -39,11 +39,11 @@ int main(int argc, char** argv) {
     astation::Error err = video->load();
     if (!err.empty()) {
         std::cerr << "Error loading video " << err << std::endl;
+        return 1;
     }
 
     int screen_w = video->getWidth();
     int screen_h = video->getHeight();
-    printf("%d %d\n", screen_w, screen_h);
 
     SDL_Window* screen = SDL_CreateWindow(
         "Animation Station",
@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
 
 	SDL_Renderer* renderer = SDL_CreateRenderer(screen, -1, 0);
     SDL_Texture* texture = SDL_CreateTexture(
-            renderer, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING,screen_w,screen_h);
+            renderer, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING, screen_w, screen_h);
 
     SDL_Rect rect;
 	rect.x = 0;
